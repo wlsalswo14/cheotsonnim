@@ -25,7 +25,7 @@ async function localWrite(file: string, content: string): Promise<void> {
   await writeFile(target, content, "utf8");
 }
 
-async function blobRead(pathname: string, fresh = false): Promise<string | null> {
+async function blobRead(pathname: string): Promise<string | null> {
   const { head } = await import("@vercel/blob");
   let url: string;
   try {
@@ -34,7 +34,7 @@ async function blobRead(pathname: string, fresh = false): Promise<string | null>
   } catch {
     return null;
   }
-  const response = await fetch(fresh ? `${url}?t=${Date.now()}` : url, { cache: "no-store" });
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) return null;
   return response.text();
 }
@@ -48,6 +48,47 @@ async function blobWrite(pathname: string, content: string): Promise<void> {
     contentType: "application/json; charset=utf-8",
     cacheControlMaxAge: 60,
   });
+}
+
+const INDEX_PREFIX = "index/recent-";
+const LEGACY_INDEX = "index/recent.json";
+const KEEP_SNAPSHOTS = 3;
+
+async function newestIndexUrl(): Promise<string | null> {
+  const { list } = await import("@vercel/blob");
+  const { blobs } = await list({ prefix: INDEX_PREFIX, limit: 100 });
+  const sorted = [...blobs].sort((a, b) => b.pathname.localeCompare(a.pathname));
+  return sorted[0]?.url ?? null;
+}
+
+/**
+ * Vercel Blob serves a mutable pathname from its CDN for up to a minute and ignores
+ * cache-busting query strings (measured: `?t=` still returns x-vercel-cache HIT), so the
+ * read-modify-write below kept starting from a stale list and silently dropped visits —
+ * 5 of 11 during one seeding session. Every index version now gets its own immutable
+ * pathname, and the newest is found through list(), which talks to the API, not the CDN.
+ */
+async function blobReadIndex(): Promise<string | null> {
+  const url = await newestIndexUrl();
+  if (!url) return blobRead(LEGACY_INDEX);
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) return null;
+  return response.text();
+}
+
+async function blobWriteIndex(content: string): Promise<void> {
+  const { del, list, put } = await import("@vercel/blob");
+  await put(`${INDEX_PREFIX}${Date.now().toString(36)}.json`, content, {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json; charset=utf-8",
+    cacheControlMaxAge: 60,
+  });
+  // Snapshots are write-once; only the superseded ones are removed, never a run.
+  const { blobs } = await list({ prefix: INDEX_PREFIX, limit: 100 });
+  const stale = [...blobs].sort((a, b) => b.pathname.localeCompare(a.pathname)).slice(KEEP_SNAPSHOTS);
+  if (stale.length > 0) await del(stale.map((blob) => blob.url)).catch(() => undefined);
 }
 
 const memoryRuns = new Map<string, RunRecord>();
@@ -75,7 +116,7 @@ export async function loadRun(id: string): Promise<RunRecord | null> {
 }
 
 export async function listRecent(): Promise<RecentEntry[]> {
-  const text = blobEnabled() ? await blobRead("index/recent.json", true) : await localRead("recent.json");
+  const text = blobEnabled() ? await blobReadIndex() : await localRead("recent.json");
   if (!text) return [];
   try {
     const parsed = JSON.parse(text) as RecentEntry[];
@@ -89,7 +130,7 @@ export async function pushRecent(entry: RecentEntry): Promise<void> {
   const current = await listRecent();
   const next = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, RECENT_LIMIT);
   const json = JSON.stringify(next);
-  if (blobEnabled()) await blobWrite("index/recent.json", json);
+  if (blobEnabled()) await blobWriteIndex(json);
   else await localWrite("recent.json", json);
 }
 
