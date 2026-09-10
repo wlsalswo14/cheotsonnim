@@ -112,6 +112,7 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
       while (queue.length > 0 && steps.length < MAX_STEPS && clock.remaining() > 90_000) {
         const action = queue.shift()!;
         const stepStart = Date.now();
+        const urlBefore = desktop.page.url();
         const outcome = await performAction(desktop, action, items);
         const shot = await snap(desktop, stepLabel(steps.length + 1, action, outcome.targetDescription));
         const step: StepRecord = {
@@ -127,6 +128,11 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
         steps.push(step);
         emit({ t: "step", step });
         items = await inventory(desktop);
+        // Element numbers only mean something on the page they were listed from. Once the
+        // customer has moved, the rest of the plan points at whatever now happens to carry
+        // those numbers — that is where toss.im's "#6 요소를 찾지 못함" came from. Drop the
+        // stale actions and let the single replan below re-read the page we are actually on.
+        if (queue.length > 0 && outcome.urlAfter && outcome.urlAfter !== urlBefore) queue = [];
         const stuck = outcome.status === "not_found" || outcome.status === "failed";
         if ((stuck || queue.length === 0) && !replanned && steps.length < MAX_STEPS && clock.remaining() > 110_000) {
           replanned = true;
