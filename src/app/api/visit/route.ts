@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 
+import { GemmaError } from "@/lib/gemma";
 import { acquireSlot, checkRateLimit, queueDepth } from "@/lib/ratelimit";
 import { findRecentByUrl } from "@/lib/store";
 import type { VisitEvent } from "@/lib/types";
@@ -9,6 +10,18 @@ import { runVisit } from "@/lib/visit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+// Kept in step with the same sentence in VisitForm.tsx (a route file may not export extras).
+const MODEL_BUSY_MESSAGE = "지금 손님이 몰려 리뷰 작성이 늦어지고 있어요. 1분 뒤 다시 시도해 주세요";
+
+/** A 429/503 from the model is a queue, not a bug: say so in the customer's words. */
+function friendlyMessage(error: unknown): string {
+  if (error instanceof GemmaError && (error.status === 429 || error.status === 503)) return MODEL_BUSY_MESSAGE;
+  const message = error instanceof Error ? error.message : "알 수 없는 오류";
+  if (message === "busy") return "지금 손님이 몰려 있어요. 잠시 후 다시 시도해 주세요.";
+  if (/model busy \((429|503)\)/.test(message) || /model request failed \((429|503)\)/.test(message)) return MODEL_BUSY_MESSAGE;
+  return message;
+}
 
 function clientKey(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -76,9 +89,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         release = await acquireSlot();
         await runVisit({ url: url.toString(), goal, emit: send });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "알 수 없는 오류";
-        console.error("visit failed:", message);
-        send({ t: "error", message: message === "busy" ? "지금 손님이 몰려 있어요. 잠시 후 다시 시도해 주세요." : message });
+        console.error("visit failed:", error instanceof Error ? error.message : error);
+        send({ t: "error", message: friendlyMessage(error) });
       } finally {
         clearInterval(heartbeat);
         release?.();

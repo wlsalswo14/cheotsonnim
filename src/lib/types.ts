@@ -133,6 +133,8 @@ export interface RunRecord {
   model: string;
   timings: Record<string, number>;
   status: "complete" | "blocked";
+  /** Present when the jury call failed: reviews are empty and only the checks scored. */
+  degraded?: { headline: string; body: string };
 }
 
 export interface RecentEntry {

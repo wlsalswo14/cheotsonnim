@@ -30,12 +30,17 @@ const NO_THINK_PREAMBLE = [
 
 export const DEFAULT_MODEL = process.env.GEMMA_MODEL?.trim() || "gemma-4-26b-a4b-it";
 
+/** Keys the API itself rejected (revoked, typo'd, wrong project) — skipped for this process. */
+const rejectedKeys = new Set<string>();
+
 function keyPool(): string[] {
   const list = (process.env.GEMMA_API_KEYS ?? process.env.GEMINI_API_KEY ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  return list;
+  const usable = list.filter((key) => !rejectedKeys.has(key));
+  // If every key got retired the pool is probably wrong, not the keys: try them all again.
+  return usable.length > 0 ? usable : list;
 }
 
 let cursor = Math.floor(Math.random() * 1000);
@@ -120,6 +125,14 @@ export async function generateJson<T>(options: GenerateOptions): Promise<GemmaRe
     }
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 300);
+      // One dead key in the pool used to kill the whole visit, because a 400 is not a
+      // "busy" status and fell straight through to the throw. Retire it and try the next.
+      if ([400, 401, 403].includes(response.status) && /API key not valid|API_KEY_INVALID|PERMISSION_DENIED|expired/i.test(detail)) {
+        rejectedKeys.add(key);
+        console.warn(`gemma: retiring a rejected API key (${response.status}), ${keys.filter((entry) => !rejectedKeys.has(entry)).length} left`);
+        lastError = new GemmaError(`api key rejected (${response.status})`, response.status);
+        continue;
+      }
       throw new GemmaError(`model request failed (${response.status}): ${detail}`, response.status);
     }
     const envelope = (await response.json()) as {

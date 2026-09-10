@@ -87,7 +87,13 @@ ${personaBlock}
 - 칭찬할 점이 있으면 솔직하게 칭찬합니다. 비판을 위한 비판은 하지 않습니다.
 - 사진에도 없고 기록에도 없는 사실(운영 주체, 약관, 가격, 환불 조건 등)은 "확인하지 못했습니다"라고 씁니다. 봤다고 지어내면 안 됩니다.
 - mission.narrative는 손님 1인칭으로, 행동 기록에 실제로 있는 단계만 이야기합니다.
-- mission.outcome은 행동 기록과 마지막 주소로 판단합니다. 목표한 화면에 실제로 도착했으면 success, 근처까지만 갔으면 partial, 시도했는데 못 갔으면 fail. 화면이 목표와 상관없는 곳이면 success가 아닙니다.
+- mission.outcome은 리뷰 분위기가 아니라 '마지막 스크린샷 + 마지막 주소 + 마지막 행동의 결과'만 보고 아래 정의대로 고릅니다.
+  · success: 마지막 화면이 목표가 말하는 '끝 상태' 자체를 보여줄 때만. 목표가 "문서를 연다"면 그 문서 본문이, "채용공고를 하나 열어본다"면 그 공고 하나의 상세 내용(직무 설명·자격요건 등)이, "제품 상세를 본다"면 그 제품 페이지가 화면에 실제로 보여야 합니다.
+  · partial: 목록·검색 결과·카테고리·메뉴처럼 '거기로 가는 길'까지만 갔을 때. 채용공고 목록, 검색 결과 목록, 문서 검색 결과는 상세 화면이 아니므로 success가 아니라 partial입니다. 목표의 일부만 이뤘을 때도 partial입니다.
+  · fail: 의미 있는 진전이 없었거나, 마지막 화면이 목표와 상관없는 곳이거나, 계속 막혀 있을 때.
+  · blocked: 사이트가 자동 방문을 막았거나 오류 페이지만 보였을 때.
+- 목표한 상세 화면을 마지막 사진에서 직접 확인하지 못했다면 success를 쓰지 않습니다. 애매하면 항상 낮은 쪽(success 대신 partial, partial 대신 fail)을 고릅니다.
+- stuck_reason에는 success가 아닌 경우 '어디까지 갔고 무엇이 남았는지'를 한 문장으로 적습니다.
 - fixes는 영향이 큰 순서로 정확히 3개. why에는 "어느 화면의 무엇을 / 어떻게 바꾸는지 / 그러면 누가 무엇을 할 수 있게 되는지"가 모두 들어가야 하고, 바꿀 문구나 수치(예: 44px, "무료로 시작하기")를 적습니다. "메타데이터 보강"처럼 뭉뚱그린 제목은 쓰지 않습니다.
 - 사이트가 자동 방문을 차단했거나 오류 페이지만 보였다면 mission.outcome을 "blocked"로 두고 그 사실을 그대로 씁니다.
 
@@ -120,6 +126,7 @@ export function deliberationUserText(input: {
   shotLabels: { id: string; label: string; viewport: string }[];
   checksSummary: string;
   blocked: boolean;
+  lastUrl: string;
 }): string {
   let where = input.site.url;
   const stepLines = input.steps.length
@@ -146,6 +153,21 @@ export function deliberationUserText(input: {
       })
     : ["- (행동 없음)"];
   const shotIds = input.shotLabels.map((shot) => shot.id).join(", ");
+  const lastStep = input.steps[input.steps.length - 1];
+  const lastDesktopShot = [...input.shotLabels].reverse().find((shot) => shot.viewport === "desktop");
+  const statusLabel = { done: "성공", skipped_safety: "안전 규칙으로 건너뜀", failed: "실패", not_found: "요소 못 찾음" };
+  const verdictFacts = [
+    "미션 판정에 쓸 사실 (이 값들을 그대로 믿으세요):",
+    `- 손님이 마지막으로 머문 주소: ${readableUrl(input.lastUrl || where)}`,
+    `- 처음 도착했던 주소: ${readableUrl(input.site.url)}`,
+    lastStep
+      ? `- 마지막 행동: ${lastStep.index}번 ${lastStep.action.type} ${lastStep.targetDescription ?? ""} → ${statusLabel[lastStep.status]}`
+      : "- 마지막 행동: 없음 (손님이 아무 행동도 하지 못했습니다)",
+    lastDesktopShot
+      ? `- 목표 달성 여부를 판정할 마지막 화면: ${lastDesktopShot.id} (${lastDesktopShot.label})`
+      : "- 마지막 화면 사진이 없습니다.",
+    "이 마지막 화면에 목표한 끝 상태가 직접 보이지 않으면 outcome은 success가 아닙니다.",
+  ].join("\n");
   return [
     `사이트: ${input.site.title || "(제목 없음)"} — ${input.site.url}`,
     input.site.description ? `사이트 설명: ${input.site.description}` : "",
@@ -154,7 +176,8 @@ export function deliberationUserText(input: {
     "",
     "행동 기록:",
     ...stepLines,
-    input.steps.length ? `행동을 마쳤을 때 손님이 있던 주소: ${readableUrl(where)}` : "",
+    "",
+    verdictFacts,
     "",
     "첨부 사진 목록 (순서대로 첨부됨):",
     ...(input.shotLabels.length ? input.shotLabels.map((shot) => `- ${shot.id}: ${shot.label} (${shot.viewport === "mobile" ? "모바일 390px" : "데스크톱 1280px"})`) : ["- (사진 없음)"]),

@@ -18,6 +18,16 @@ const PHASES: { id: string; label: string }[] = [
 
 const EXAMPLES = ["wanted.co.kr", "ko.wikipedia.org", "github.com"];
 
+/** Same sentence as api/visit/route.ts. */
+const MODEL_BUSY_MESSAGE = "지금 손님이 몰려 리뷰 작성이 늦어지고 있어요. 1분 뒤 다시 시도해 주세요";
+
+/** The jury call is one 25~30s request, so the stream goes quiet right before the finish. */
+const QUIET_MS = 15_000;
+
+function friendly(message: string): string {
+  return /\((429|503)\)/.test(message) ? MODEL_BUSY_MESSAGE : message;
+}
+
 interface LiveState {
   phase: string;
   phaseMsg: string;
@@ -32,7 +42,7 @@ interface LiveState {
 
 const initialLive: LiveState = { phase: "queue", phaseMsg: "손님이 줄을 서는 중", phaseIndex: -1, shots: [], steps: [], plan: null, checks: null, reviews: null, verdict: null };
 
-export function VisitForm() {
+export function VisitForm({ sampleReportId, visitCount }: { sampleReportId?: string; visitCount?: number } = {}) {
   const router = useRouter();
   const params = useSearchParams();
   const [url, setUrl] = useState(() => params.get("url") ?? "");
@@ -42,10 +52,18 @@ export function VisitForm() {
   const [live, setLive] = useState<LiveState>(initialLive);
   const [selectedShot, setSelectedShot] = useState<string | null>(null);
   const [doneId, setDoneId] = useState<string | null>(null);
+  const [quiet, setQuiet] = useState(false);
+  const lastEventAt = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const forceFresh = params.get("fresh") === "1";
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setQuiet(Date.now() - lastEventAt.current > QUIET_MS), 2_000);
+    return () => clearInterval(timer);
+  }, [running]);
 
   const currentShot = useMemo(() => {
     if (selectedShot) return live.shots.find((shot) => shot.id === selectedShot) ?? null;
@@ -59,6 +77,8 @@ export function VisitForm() {
     setDoneId(null);
     setSelectedShot(null);
     setLive(initialLive);
+    setQuiet(false);
+    lastEventAt.current = Date.now();
     setRunning(true);
     const controller = new AbortController();
     abortRef.current = controller;
@@ -78,7 +98,7 @@ export function VisitForm() {
         }
         throw new Error(data.error ?? "요청이 실패했습니다.");
       }
-      if (!response.ok || !response.body) throw new Error(`서버 오류 (${response.status})`);
+      if (!response.ok || !response.body) throw new Error(friendly(`서버 오류 (${response.status})`));
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -95,6 +115,8 @@ export function VisitForm() {
           const line = chunk.split("\n").find((entry) => entry.startsWith("data: "));
           if (!line) continue;
           const eventData = JSON.parse(line.slice(6)) as VisitEvent;
+          lastEventAt.current = Date.now();
+          setQuiet(false);
           if (eventData.t === "error") throw new Error(eventData.message);
           if (eventData.t === "done") finishedId = eventData.id;
           setLive((prev) => reduce(prev, eventData));
@@ -105,7 +127,7 @@ export function VisitForm() {
       setTimeout(() => router.push(`/r/${finishedId}`), 900);
     } catch (caught) {
       if ((caught as Error).name === "AbortError") return;
-      setError((caught as Error).message);
+      setError(friendly((caught as Error).message));
       setRunning(false);
     }
   }
@@ -129,6 +151,11 @@ export function VisitForm() {
               );
             })}
           </ol>
+          {quiet && !doneId && (
+            <p className="live__quiet" role="status">
+              아직 진행 중이에요. {live.phase === "deliberate" ? "손님 5명이 리뷰를 쓰는 데 25~30초쯤 걸립니다." : "화면이 넘어가길 기다리는 중입니다."} 창을 닫지 마세요.
+            </p>
+          )}
           {live.plan && (
             <>
               <p className="live__title">손님의 목표</p>
@@ -203,9 +230,17 @@ export function VisitForm() {
         <input id="goal" name="goal" placeholder="예: 가격을 확인하고 무료 체험을 시작해 본다" value={goal} onChange={(event) => setGoal(event.target.value)} maxLength={120} />
       </div>
       {error && <div className="form-error">{error}</div>}
-      <button type="submit" className="btn btn--accent" disabled={!url.trim()}>
-        손님 보내기 →
-      </button>
+      <div className="visit-form__actions">
+        <button type="submit" className="btn btn--accent" disabled={!url.trim()}>
+          손님 보내기 →
+        </button>
+        {sampleReportId && (
+          <a className="btn btn--ghost" href={`/r/${sampleReportId}`}>
+            샘플 리포트 보기
+          </a>
+        )}
+      </div>
+      {typeof visitCount === "number" && visitCount > 0 && <p className="visit-form__count">지금까지 {visitCount}곳 방문</p>}
       <div className="examples">
         <span>예시:</span>
         {EXAMPLES.map((example) => (

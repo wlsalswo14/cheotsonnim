@@ -2,12 +2,12 @@ import type { Browser } from "playwright-core";
 
 import { collectFacts, inventory, formatInventory, launchBrowser, navigate, openSession, performAction, screenshotJpeg, thumbnail, type InventoryItem, type PageSession } from "./browser";
 import { buildChecks, summarizeChecks } from "./checks";
-import { generateJson, imagePart, type GemmaPart } from "./gemma";
+import { DEFAULT_MODEL, generateJson, imagePart, type GemmaPart } from "./gemma";
 import { PERSONAS } from "./personas";
 import { DELIBERATION_SYSTEM, PLAN_SYSTEM, deliberationUserText, normalizePlan, planUserText, type DeliberationResponse, type PlanResponse } from "./prompts";
 import { computeScore } from "./score";
 import { newRunId, pushRecent, saveRun } from "./store";
-import type { Fix, MissionOutcome, PageFacts, PersonaId, Review, RunRecord, Shot, StepRecord, Verdict, VisitEvent } from "./types";
+import type { Fix, MissionOutcome, PageFacts, PersonaId, PlannedAction, Review, RunRecord, Shot, StepRecord, Verdict, VisitEvent } from "./types";
 import { assertPublicHost, normalizeInputUrl } from "./url-safety";
 
 export interface VisitInput {
@@ -92,7 +92,12 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
       emit({ t: "phase", phase: "plan", msg: "첫 화면을 보고 뭘 할지 정하는 중" });
       const planStart = Date.now();
       items = await inventory(desktop);
-      const plan = await requestPlan({ goal: goalInput, facts: desktopFacts, items, landing, maxActions: 4 });
+      // The planner going down must not throw away a visit that already has photos: the
+      // customer falls back to what a real one would do — scroll once and look around.
+      const plan = (await requestPlan({ goal: goalInput, facts: desktopFacts, items, landing, maxActions: 4 }).catch((error) => {
+        console.warn("plan call failed, falling back to a look-around:", (error as Error).message.slice(0, 200));
+        return null;
+      })) ?? { goal: goalInput ?? "사이트 첫인상 둘러보기", actions: [] as PlannedAction[], expect: "" };
       // Nothing clickable (or every planned target was invented): a first customer would
       // at least scroll once before giving up, and the jury needs a second screenshot.
       if (plan.actions.length === 0) plan.actions.push({ type: "scroll", why: "더 볼 것이 있는지 확인" });
@@ -129,7 +134,10 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
           // Only the current step's own photo may be shown as "the screen right now";
           // an older shot would describe a page the customer already left.
           const title = await desktop.page.title().catch(() => desktopFacts.title);
-          const next = await requestPlan({ goal: goalUsed, facts: { ...desktopFacts, title, finalUrl: desktop.page.url() }, items, landing: shot, maxActions: 3, replanSteps: steps });
+          const next = await requestPlan({ goal: goalUsed, facts: { ...desktopFacts, title, finalUrl: desktop.page.url() }, items, landing: shot, maxActions: 3, replanSteps: steps }).catch((error) => {
+            console.warn("replan call failed, stopping after the first plan:", (error as Error).message.slice(0, 200));
+            return { goal: goalUsed, actions: [] as PlannedAction[], expect: "" };
+          });
           queue = next.actions;
           if (queue.length > 0) emit({ t: "plan", goal: goalUsed, actions: queue });
         }
@@ -165,6 +173,9 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
     const checks = buildChecks(desktopFacts, mobileFacts);
     emit({ t: "checks", checks });
 
+    // Where the customer actually ended up after the clicks — desktopFacts.finalUrl is the
+    // landing page and would let the jury call a search-results page "the goal screen".
+    const lastUrl = desktop.page.url();
     await desktop.close();
     desktop = undefined;
     await browser.close().catch(() => undefined);
@@ -173,7 +184,7 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
     emit({ t: "phase", phase: "deliberate", msg: "손님 5명이 리뷰를 쓰고 있습니다" });
     const deliberateStart = Date.now();
     const blocked = desktopFacts.botBlocked;
-    const { reviews, verdict, model } = await deliberate({ goal: goalUsed, facts: desktopFacts, steps, shots, checksSummary: summarizeChecks(checks), blocked });
+    const { reviews, verdict, model, degraded } = await deliberate({ goal: goalUsed, facts: desktopFacts, steps, shots, checksSummary: summarizeChecks(checks), blocked, lastUrl });
     clock.mark("deliberate", deliberateStart);
     const score = computeScore(reviews, checks, verdict.missionOutcome);
     emit({ t: "reviews", reviews });
@@ -196,6 +207,7 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
       model,
       timings: { ...clock.marks, total: clock.elapsed() },
       status: blocked ? "blocked" : "complete",
+      ...(degraded ? { degraded } : {}),
     };
     emit({ t: "phase", phase: "save", msg: "리뷰를 게시하는 중" });
     await saveRun(record);
@@ -256,8 +268,78 @@ function pickShotsForJury(shots: Shot[]): Shot[] {
   return [...first, ...lastSteps, ...mobile.slice(0, 2)];
 }
 
-async function deliberate(input: { goal: string; facts: PageFacts; steps: StepRecord[]; shots: Shot[]; checksSummary: string; blocked: boolean }): Promise<{ reviews: Review[]; verdict: Verdict; model: string }> {
-  const selected = pickShotsForJury(input.shots);
+/** Arrival + end state + phone view: the smallest prompt that still supports a real verdict. */
+function pickShotsMinimal(shots: Shot[]): Shot[] {
+  const desktop = shots.filter((shot) => shot.viewport === "desktop");
+  const mobile = shots.filter((shot) => shot.viewport === "mobile");
+  const picked: Shot[] = [];
+  if (desktop[0]) picked.push(desktop[0]);
+  const last = desktop[desktop.length - 1];
+  if (last && last !== desktop[0]) picked.push(last);
+  if (mobile[0]) picked.push(mobile[0]);
+  return picked;
+}
+
+const DEGRADED_NOTE = {
+  headline: "리뷰를 받지 못했어요",
+  body: "손님이 몰려 리뷰 생성에 실패했습니다. 잠시 후 '같은 곳에 손님 다시 보내기'를 눌러 주세요.",
+};
+
+interface DeliberateInput {
+  goal: string;
+  facts: PageFacts;
+  steps: StepRecord[];
+  shots: Shot[];
+  checksSummary: string;
+  blocked: boolean;
+  lastUrl: string;
+}
+
+interface DeliberateResult {
+  reviews: Review[];
+  verdict: Verdict;
+  model: string;
+  degraded?: RunRecord["degraded"];
+}
+
+/**
+ * A dead jury call used to kill the whole visit after four minutes of real browsing. Now it
+ * costs the reviews only: one cheaper retry, then an honest checks-only report.
+ */
+async function deliberate(input: DeliberateInput): Promise<DeliberateResult> {
+  try {
+    return await runJury(input, pickShotsForJury(input.shots));
+  } catch (error) {
+    console.warn("jury call failed, retrying with fewer photos:", (error as Error).message.slice(0, 200));
+  }
+  try {
+    return await runJury(input, pickShotsMinimal(input.shots));
+  } catch (error) {
+    console.error("jury call failed twice, saving a checks-only report:", (error as Error).message.slice(0, 200));
+    return degradedResult(input);
+  }
+}
+
+function degradedResult(input: DeliberateInput): DeliberateResult {
+  return {
+    reviews: [],
+    verdict: {
+      oneLiner: "리뷰를 받지 못해 자동 점검표 결과만 남깁니다",
+      firstImpression: "",
+      // Nothing read the screenshots, so nothing may claim the mission succeeded; the report
+      // shows "판정 못 함" instead of a verdict and the score keeps only the check points.
+      missionOutcome: input.blocked ? "blocked" : "fail",
+      missionNarrative: "",
+      stuckReason: null,
+      praise: "",
+      fixes: [],
+    },
+    model: DEFAULT_MODEL,
+    degraded: DEGRADED_NOTE,
+  };
+}
+
+async function runJury(input: DeliberateInput, selected: Shot[]): Promise<DeliberateResult> {
   const text = deliberationUserText({
     goal: input.goal,
     site: { title: input.facts.title, url: input.facts.finalUrl, description: input.facts.metaDescription, textSample: input.facts.textSample },
@@ -265,6 +347,7 @@ async function deliberate(input: { goal: string; facts: PageFacts; steps: StepRe
     shotLabels: selected.map((shot) => ({ id: shot.id, label: shot.label, viewport: shot.viewport })),
     checksSummary: input.checksSummary,
     blocked: input.blocked,
+    lastUrl: input.lastUrl,
   });
   const parts: GemmaPart[] = [{ text }];
   for (const shot of selected) {

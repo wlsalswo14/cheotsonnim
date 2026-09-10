@@ -24,6 +24,8 @@ export function computeScore(reviews: Review[], checks: Check[], mission: Missio
     checkPassRatio: Math.round(checkPassRatio * 100) / 100,
     checkPoints: Math.round(checkPoints),
     missionPoints,
-    grade: gradeFor(total),
+    // No reviews means the jury never ran: 25 points out of 100 is not a grade, and calling
+    // it "다신 안 와요" would blame the site for our outage.
+    grade: ratings.length ? gradeFor(total) : "채점 미완성",
   };
 }

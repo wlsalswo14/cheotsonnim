@@ -309,6 +309,24 @@ img {
   border-radius: 10px;
 }
 
+.visit-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.visit-form__actions .btn {
+  flex: 1 1 190px;
+  text-decoration: none;
+}
+
+.visit-form__count {
+  margin: -4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .examples {
   display: flex;
   flex-wrap: wrap;
@@ -445,6 +463,18 @@ img {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--muted);
+}
+
+/* The jury call is one long request; without this the stream looks frozen. */
+.live__quiet {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .steplog {
@@ -879,6 +909,12 @@ img {
 .badge--blocked {
   background: var(--bad-soft);
   color: var(--bad);
+}
+
+/* Jury call failed: neither success nor failure was ever judged. */
+.badge--unknown {
+  background: var(--paper-2);
+  color: var(--muted);
 }
 
 .mission__narr {

@@ -3,12 +3,16 @@ import { Suspense } from "react";
 import { RecentGrid } from "@/components/RecentGrid";
 import { VisitForm } from "@/components/VisitForm";
 import { PERSONAS } from "@/lib/personas";
-import { listRecentHosts } from "@/lib/store";
+import { listRecent, uniqueByHost } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
+/** The report judges land on from "샘플 리포트 보기" — a real production run. */
+const SAMPLE_REPORT_ID = "mtvfm2tz-v6xkt7";
+
 export default async function Home() {
-  const recent = await listRecentHosts(8).catch(() => []);
+  const all = await listRecent().catch(() => []);
+  const recent = uniqueByHost(all, 8);
   return (
     <main>
       <section className="wrap hero">
@@ -23,7 +27,7 @@ export default async function Home() {
         </div>
         <div className="hero__side">
           <Suspense fallback={<div className="visit-form">불러오는 중…</div>}>
-            <VisitForm />
+            <VisitForm sampleReportId={SAMPLE_REPORT_ID} visitCount={all.length} />
           </Suspense>
         </div>
       </section>

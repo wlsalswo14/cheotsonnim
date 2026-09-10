@@ -108,7 +108,9 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
           <span className="card__num" style={{ marginBottom: 0 }}>
             손님의 미션
           </span>
-          <span className={`badge badge--${record.verdict.missionOutcome}`}>{OUTCOME_LABEL[record.verdict.missionOutcome]}</span>
+          <span className={`badge badge--${record.degraded ? "unknown" : record.verdict.missionOutcome}`}>
+            {record.degraded ? "판정 못 함" : OUTCOME_LABEL[record.verdict.missionOutcome]}
+          </span>
         </div>
         <div className="mission__goal">“{record.goalUsed}”</div>
         {record.verdict.missionNarrative && <p className="mission__narr">{record.verdict.missionNarrative}</p>}
@@ -134,8 +136,18 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
       <section>
         <div className="section__head">
           <h2>손님 5명의 리뷰</h2>
-          <span className="section__sub">평균 {record.score.reviewAvg} / 5</span>
+          <span className="section__sub">{record.degraded ? "리뷰 없음" : `평균 ${record.score.reviewAvg} / 5`}</span>
         </div>
+        {record.degraded && (
+          <div className="card">
+            <div className="card__num">리뷰 생성 실패</div>
+            <h3 style={{ margin: "0 0 6px" }}>{record.degraded.headline}</h3>
+            <p style={{ margin: 0, color: "var(--ink-2)" }}>{record.degraded.body}</p>
+            <p className="meta-line" style={{ marginTop: 10 }}>
+              아래 자동 점검표와 증거 사진은 실제 방문에서 그대로 수집한 것이라 그대로 보실 수 있습니다.
+            </p>
+          </div>
+        )}
         <div className="reviews">
           {record.reviews.map((review) => {
             const persona = PERSONA_BY_ID[review.persona];
@@ -257,7 +269,7 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
         </div>
         <div className="breakdown">
           <div className="bk">
-            <div className="bk__label">손님 평점 (평균 {record.score.reviewAvg}/5)</div>
+            <div className="bk__label">손님 평점 {record.degraded ? "(리뷰 없음)" : `(평균 ${record.score.reviewAvg}/5)`}</div>
             <div className="bk__val">
               {record.score.reviewPoints}
               <small> / 60</small>
@@ -277,7 +289,7 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
             </div>
           </div>
           <div className="bk">
-            <div className="bk__label">미션 결과 ({OUTCOME_LABEL[record.verdict.missionOutcome]})</div>
+            <div className="bk__label">미션 결과 ({record.degraded ? "판정 못 함" : OUTCOME_LABEL[record.verdict.missionOutcome]})</div>
             <div className="bk__val">
               {record.score.missionPoints}
               <small> / 15</small>

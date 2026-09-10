@@ -98,7 +98,10 @@ export async function pushRecent(entry: RecentEntry): Promise<void> {
  * the same host would look broken. The gallery still lists every run.
  */
 export async function listRecentHosts(limit: number): Promise<RecentEntry[]> {
-  const recent = await listRecent();
+  return uniqueByHost(await listRecent(), limit);
+}
+
+export function uniqueByHost(recent: RecentEntry[], limit: number): RecentEntry[] {
   const seen = new Set<string>();
   const unique: RecentEntry[] = [];
   for (const entry of recent) {

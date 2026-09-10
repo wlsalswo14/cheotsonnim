@@ -44,3 +44,6 @@ next-env.d.ts
 .data/
 .env*.local
 fonts/*.zip
+
+.vercel
+.env*
