@@ -2,7 +2,7 @@ import type { Browser } from "playwright-core";
 
 import { collectFacts, inventory, formatInventory, launchBrowser, navigate, openSession, performAction, screenshotJpeg, thumbnail, type InventoryItem, type PageSession } from "./browser";
 import { buildChecks, summarizeChecks } from "./checks";
-import { DEFAULT_MODEL, generateJson, imagePart, type GemmaPart } from "./gemma";
+import { DEFAULT_MODEL, GemmaError, generateJson, imagePart, type GemmaPart } from "./gemma";
 import { PERSONAS } from "./personas";
 import { DELIBERATION_SYSTEM, PLAN_SYSTEM, deliberationUserText, normalizePlan, planUserText, type DeliberationResponse, type PlanResponse } from "./prompts";
 import { computeScore } from "./score";
@@ -94,7 +94,10 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
       items = await inventory(desktop);
       // The planner going down must not throw away a visit that already has photos: the
       // customer falls back to what a real one would do — scroll once and look around.
+      // A busy model is the exception: the jury call would fail too, so ask for a retry
+      // instead of spending the visitor's slot on a checks-only report.
       const plan = (await requestPlan({ goal: goalInput, facts: desktopFacts, items, landing, maxActions: 4 }).catch((error) => {
+        if (error instanceof GemmaError && (error.status === 429 || error.status === 503)) throw error;
         console.warn("plan call failed, falling back to a look-around:", (error as Error).message.slice(0, 200));
         return null;
       })) ?? { goal: goalInput ?? "사이트 첫인상 둘러보기", actions: [] as PlannedAction[], expect: "" };
