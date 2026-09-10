@@ -7,12 +7,17 @@ import { listRecent, uniqueByHost } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-/** The report judges land on from "샘플 리포트 보기" — a real production run. */
-const SAMPLE_REPORT_ID = "mtvfm2tz-v6xkt7";
+/**
+ * The report judges land on from "샘플 리포트 보기": the gov.kr visit, where the customer's
+ * first click was swallowed by a popup, closed it and got to 여권 재발급 안내 anyway.
+ */
+const SAMPLE_REPORT_ID = "mtvgvps8-tdeyhc";
 
 export default async function Home() {
   const all = await listRecent().catch(() => []);
   const recent = uniqueByHost(all, 8);
+  // "곳" means places, not visits: the same site can be visited more than once.
+  const placeCount = new Set(all.map((entry) => entry.host.toLowerCase())).size;
   return (
     <main>
       <section className="wrap hero">
@@ -27,7 +32,7 @@ export default async function Home() {
         </div>
         <div className="hero__side">
           <Suspense fallback={<div className="visit-form">불러오는 중…</div>}>
-            <VisitForm sampleReportId={SAMPLE_REPORT_ID} visitCount={all.length} />
+            <VisitForm sampleReportId={SAMPLE_REPORT_ID} visitCount={placeCount} />
           </Suspense>
         </div>
       </section>
