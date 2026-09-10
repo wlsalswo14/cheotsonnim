@@ -159,12 +159,20 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
     }
 
     let mobileFacts: PageFacts | null = null;
-    if (clock.remaining() > 60_000) {
+    // A slow site used to spend the whole budget on a second full visit: starpl.net took
+    // 57s just to arrive and 75s more on the phone pass. The reviews and the checks are
+    // worth more than a second screenshot, so a site that is already dragging loses the
+    // phone pass instead of the jury.
+    const arriveMs = clock.marks.arrive ?? 0;
+    const skipMobile = clock.remaining() < 90_000 || arriveMs > 45_000;
+    if (skipMobile) {
+      console.warn(`mobile pass skipped (arrive ${arriveMs}ms, ${clock.remaining()}ms left)`);
+    } else {
       emit({ t: "phase", phase: "mobile", msg: "이번엔 휴대폰으로 다시 들어가 봅니다" });
       const mobileStart = Date.now();
       try {
         mobile = await openSession(browser, "mobile");
-        const mobileNav = await navigate(mobile, url.toString());
+        const mobileNav = await navigate(mobile, url.toString(), 15_000);
         await snap(mobile, "모바일: 첫 화면");
         mobileFacts = await collectFacts(mobile, url.toString(), mobileNav);
         if (!mobileFacts.botBlocked) {
@@ -222,7 +230,7 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
       verdict,
       score,
       model,
-      timings: { ...clock.marks, total: clock.elapsed() },
+      timings: { ...clock.marks, total: clock.elapsed(), ...(skipMobile ? { mobileSkipped: true } : {}) },
       status: blocked ? "blocked" : "complete",
       ...(degraded ? { degraded } : {}),
     };

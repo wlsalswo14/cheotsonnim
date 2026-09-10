@@ -163,24 +163,24 @@ export interface NavigationResult {
   loadMs: number;
 }
 
-export async function navigate(session: PageSession, url: string): Promise<NavigationResult> {
+export async function navigate(session: PageSession, url: string, timeoutMs = 20_000): Promise<NavigationResult> {
   const started = Date.now();
   const page = session.page;
   let response;
   try {
-    response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25_000 });
+    response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
   } catch (error) {
     const message = (error as Error).message;
     if (/ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_SSL|ERR_CERT|net::/.test(message)) {
       throw new Error(`사이트에 연결하지 못했습니다 (${message.match(/net::[A-Z_]+/)?.[0] ?? "connection error"}).`);
     }
     if (/Timeout/i.test(message)) {
-      throw new Error("사이트가 25초 안에 응답하지 않았습니다.");
+      throw new Error(`사이트가 ${Math.round(timeoutMs / 1000)}초 안에 응답하지 않았습니다.`);
     }
     throw error;
   }
   const loadMs = Date.now() - started;
-  await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
+  await page.waitForLoadState("networkidle", { timeout: 4_000 }).catch(() => undefined);
   await page.waitForTimeout(500);
   return { status: response?.status() ?? null, loadMs };
 }
@@ -530,7 +530,7 @@ export async function performAction(session: PageSession, action: PlannedAction,
   const item = action.target !== undefined ? items.find((entry) => entry.i === action.target) : undefined;
   const settle = async () => {
     await page.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => undefined);
-    await page.waitForLoadState("networkidle", { timeout: 4_000 }).catch(() => undefined);
+    await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
     await page.waitForTimeout(600);
   };
   try {

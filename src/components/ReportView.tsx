@@ -251,6 +251,7 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
           <h2>자동 점검표</h2>
           <span className="section__sub">
             통과 {record.checks.filter((check) => check.status === "pass").length} · 주의 {record.checks.filter((check) => check.status === "warn").length} · 실패 {record.checks.filter((check) => check.status === "fail").length}
+            {record.timings.mobileSkipped ? " · 모바일 재방문은 시간 부족으로 생략" : ""}
           </span>
         </div>
         <div className="checks">
@@ -349,7 +350,7 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
           </Link>
         </div>
         <p className="meta-line" style={{ marginTop: 12 }}>
-          {formatSeoul(record.createdAt)} · {record.model} · 총 {(record.timings.total / 1000).toFixed(0)}초 · 리포트 {record.id}
+          {formatSeoul(record.createdAt)} · {record.model} · 총 {(Number(record.timings.total ?? 0) / 1000).toFixed(0)}초 · 리포트 {record.id}
         </p>
       </section>
 

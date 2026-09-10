@@ -18,7 +18,8 @@ export function RecentGrid({ entries, emptyText = "아직 방문 기록이 없�
               <span className="score-pill" style={{ background: scoreColor(entry.score) }}>
                 {entry.score}
               </span>
-              {entry.grade}
+              {/* A blocked visit never got a grade worth printing — say why instead. */}
+              {entry.status === "blocked" ? <span className="badge badge--blocked">입장 거부</span> : entry.grade}
             </span>
           </div>
         </Link>

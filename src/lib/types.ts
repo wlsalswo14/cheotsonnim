@@ -131,7 +131,8 @@ export interface RunRecord {
   verdict: Verdict;
   score: ScoreBreakdown;
   model: string;
-  timings: Record<string, number>;
+  /** Phase durations in ms, plus `mobileSkipped: true` when the budget cut the phone pass. */
+  timings: Record<string, number | boolean>;
   status: "complete" | "blocked";
   /** Present when the jury call failed: reviews are empty and only the checks scored. */
   degraded?: { headline: string; body: string };

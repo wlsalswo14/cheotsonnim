@@ -55,7 +55,7 @@ AI 코딩 도구 덕분에 웹사이트를 만드는 비용은 거의 0이 됐�
 | www.daangn.com | (손님이 직접 정함 → 중고 물품 검색하기) | 부분 달성 | 83 | [mtvgteni-onaolv](https://cheotsonnim.vercel.app/r/mtvgteni-onaolv) |
 | readmd.kr | (손님이 직접 정함 → 서비스 사용법 확인하기) | 부분 달성 | 73 | [mtvh530f-m3qfgb](https://cheotsonnim.vercel.app/r/mtvh530f-m3qfgb) |
 | toss.im | 무엇을 하는 회사인지 알아보고 채용 페이지를 찾는다 | 부분 달성 | 66 | [mtvhddfc-pfg7wp](https://cheotsonnim.vercel.app/r/mtvhddfc-pfg7wp) |
-| www.11st.co.kr | (손님이 직접 정함 → 쇼킹딜 상품 구경하기) | 목표 달성 | 64 | [mtvhfay9-mdwgnt](https://cheotsonnim.vercel.app/r/mtvhfay9-mdwgnt) |
+| www.11st.co.kr | (손님이 직접 정함 → 인기 상품 검색하기) | 부분 달성 | 64 | [mtvjdft3-m3jodd](https://cheotsonnim.vercel.app/r/mtvjdft3-m3jodd) |
 | www.wanted.co.kr | 프론트엔드 개발자 채용공고를 하나 열어본다 | 부분 달성 | 54 | [mtvgm9vo-xia6gk](https://cheotsonnim.vercel.app/r/mtvgm9vo-xia6gk) |
 | github.com | 회원가입 페이지까지만 가본다 | 실패 | 52 | [mtvgxskz-zju4qw](https://cheotsonnim.vercel.app/r/mtvgxskz-zju4qw) |
 | www.g2.com | (손님이 직접 정함) | 입장 거부 | 22 | [mtvgfzc7-e21ocb](https://cheotsonnim.vercel.app/r/mtvgfzc7-e21ocb) |
@@ -77,7 +77,7 @@ AI 코딩 도구 덕분에 웹사이트를 만드는 비용은 거의 0이 됐�
 - [x] 봇 차단 사이트(입장 거부) 케이스 리포트 정상 표시 — www.g2.com, 오류 없이 "입장 거부"로 저장
 - [x] 심사위원이 바로 볼 수 있는 샘플 리포트 6개 이상 갤러리에 준비 (위 표 8건 + 갤러리 15건)
 - [x] 모델이 응답하지 않을 때 리포트가 죽지 않고 점검표만으로 저장되는지 확인 (모델명을 없는 값으로 바꿔 주입 테스트)
-- [x] 동시 방문 3건 부하 확인 (2026-09-10: 3건 모두 성공, 73s / 219s / 252s, 실패·거절 없음)
+- [x] 동시 방문 3건 부하 확인 (2026-09-10: 3건 모두 성공, 실패·거절 없음). 오래 걸린 방문의 원인은 동시성이 아니라 느린 대상 사이트였습니다 — 같은 사이트를 혼자 방문해도 208초가 걸렸습니다. 지금은 예산이 이를 막습니다: 첫 도착이 45초를 넘거나 남은 시간이 90초 미만이면 모바일 재방문을 건너뛰고(리포트에 "모바일 재방문은 시간 부족으로 생략"으로 표시) 리뷰와 점검표를 지킵니다.
 - [x] README 링크 기입, 저장소 공개 (https://github.com/wlsalswo14/cheotsonnim)
 - [ ] 레이트리밋(IP당 10분 6회, 동시 1회)이 투표 기간 트래픽에 충분한지 재점검 — 심사 시작 전 실제 유입을 보고 `VISITS_PER_WINDOW` / `MAX_CONCURRENT_VISITS` 조정
 - [ ] Gemma API 키 풀에서 만료된 키 1개 교체 (현재는 코드가 자동으로 건너뛰지만 호출 1회를 낭비함)

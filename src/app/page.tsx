@@ -15,7 +15,10 @@ const SAMPLE_REPORT_ID = "mtvj91z2-whxklw";
 
 export default async function Home() {
   const all = await listRecent().catch(() => []);
-  const recent = uniqueByHost(all, 8);
+  // The wall on the front page is a shop window, not the log: a site that refused the
+  // customer at the door, or scored so low that the card is all bad news, says nothing about
+  // what the service does. Both still appear in /gallery.
+  const recent = uniqueByHost(all.filter((entry) => entry.status !== "blocked" && entry.score >= 30), 8);
   // "곳" means places, not visits: the same site can be visited more than once.
   const placeCount = new Set(all.map((entry) => entry.host.toLowerCase())).size;
   return (
