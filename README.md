@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 첫손님 — 배포 전에 AI 손님 5명이 먼저 다녀갑니다
 
-## Getting Started
+> 주소 하나를 넣으면 AI 손님 5명이 **실제 Chromium 브라우저**로 사이트를 직접 써 보고, 스크린샷을 근거로 리뷰와 점수를 남깁니다. AI 미스터리 쇼퍼입니다.
 
-First, run the development server:
+원티드 AI Championship 2026 출품작. 서비스 링크: (배포 후 기입)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 어떤 문제를 푸나
+
+바이브코딩과 AI 코딩 도구 덕분에 웹사이트를 **만드는** 비용은 거의 0이 됐지만, 만든 것을 **써 보는** 비용은 그대로입니다. 배포 직후 첫 사용자가 겪는 문제(핵심 버튼이 안 보임, 모바일에서 깨짐, 스크린리더로는 접근 불가, 팝업이 화면을 가림)는 만든 사람 눈에는 안 보입니다. 사용자 테스트를 사람에게 맡기면 며칠과 수십만 원이 듭니다.
+
+첫손님은 그 첫 사용자 역할을 60~120초 안에 대신합니다.
+
+## 어떻게 동작하나
+
+```text
+URL (+ 손님에게 시킬 일)
+  → 실제 Chromium 데스크톱 1280px 방문, 첫 화면 촬영, 사실 수집
+  → Gemma 4: 스크린샷 + 클릭 가능한 요소 목록을 보고 목표와 행동 ≤4개 계획
+  → 실행기: 클릭·입력·키·스크롤 (결제·삭제·탈퇴 클릭 금지, 비밀번호·카드 입력 금지)
+  → 막히면 한 번 재계획 (최대 6단계)
+  → 모바일 390px 재방문 (오버플로, 탭 타깃, 작은 글자)
+  → 결정론적 점검표 18항목 (HTTPS, 속도, alt, 라벨, 콘솔 오류, 가로 스크롤 …)
+  → Gemma 4: 손님 5명 리뷰 + 매니저 총평 (근거 사진 id 필수)
+  → 점수 = 손님 평점 60 + 점검표 25 + 미션 15 (계산식 공개)
+  → 리포트 저장, 공유 링크와 OG 이미지
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+전 과정이 SSE로 브라우저에 실시간 전송되어 손님이 지금 무엇을 보고 있는지 그대로 보입니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 손님 5명
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 손님 | 보는 것 |
+| --- | --- |
+| ⏱️ 바쁜 손님 | 3초 안에 핵심 행동을 찾을 수 있는가, 팝업이 가리는가 |
+| 👓 어르신 손님 | 글자 크기·대비, 영문 약어, 버튼처럼 안 보이는 버튼 |
+| 📱 모바일 손님 | 가로 스크롤, 44px 미만 탭 타깃, 잘리는 텍스트 |
+| 🎧 스크린리더 손님 | alt 텍스트, 이름 없는 버튼, 라벨 없는 입력창, h1 구조 |
+| 🧐 깐깐한 손님 | HTTPS, 운영 주체, 가격 투명성, 다크 패턴 |
 
-## Learn More
+### AI가 하는 일과 하지 않는 일
 
-To learn more about Next.js, take a look at the following resources:
+- **AI가 하는 일**: 화면을 보고 다음 행동을 고르기, 손님 시점의 리뷰 쓰기, 고칠 것의 우선순위 정하기. 주관적 판단이 필요한 곳에만 씁니다.
+- **AI가 하지 않는 일**: 사실 판정과 점수. HTTPS 여부, 로드 시간, 콘솔 오류, alt 누락 수, 오버플로 픽셀은 브라우저에서 직접 측정하고, 점수는 고정 계산식으로 냅니다. 리뷰의 모든 주장은 근거 스크린샷 id를 달아야 하고, 존재하지 않는 id는 버립니다.
+- **안전 규칙**: 공개 인터넷 주소만(사설망·localhost 차단), 결제·구매·삭제·탈퇴 텍스트가 있는 요소는 클릭하지 않음, 비밀번호·카드·주민번호 입력창은 비워 둠, 이메일·전화는 합성값만 입력, 비밀번호 폼은 제출하지 않음.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 기술 스택
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Next.js 16 (App Router) · TypeScript · React 19
+- Playwright(Chromium) — 로컬은 `playwright`, 서버리스는 `@sparticuz/chromium` + `playwright-core`
+- Gemma 4 (`gemma-4-26b-a4b-it`, Google AI Studio API) — 시스템 프롬프트로 thinking을 억제해 비전 호출당 약 6초
+- Vercel Hobby (함수 300초, 2GB) + Vercel Blob (리포트 저장)
 
-## Deploy on Vercel
+## 로컬 실행
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```powershell
+npm ci
+npx playwright install chromium
+# .env.local
+#   GEMMA_API_KEYS=key1,key2   (쉼표로 여러 개, 429 시 순환)
+#   GEMMA_MODEL=gemma-4-26b-a4b-it
+npm run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`http://localhost:3000` 에서 주소를 넣고 "손님 보내기". 리포트는 `.data/runs/`에 JSON으로 저장됩니다.
+
+## 사용한 AI 도구 (공개)
+
+- Gemma 4 — 서비스 런타임의 유일한 모델. 행동 계획과 리뷰·총평 생성.
+- Claude Code (Claude Fable 5.1 감독, Claude Opus 구현) — 설계, 코드 작성, 테스트, 문서.
+
+## 한계
+
+- 로그인 뒤의 화면은 볼 수 없습니다(손님은 계정을 만들지 않습니다).
+- 봇 차단이 강한 사이트는 첫 화면에서 막힐 수 있으며, 그 경우 리포트에 "입장 거부"로 표시합니다.
+- 리뷰는 손님 시점의 의견이며, 점검표 항목만 사실 판정입니다.
