@@ -444,6 +444,22 @@ function describe(item: InventoryItem | undefined): string | null {
 }
 
 /**
+ * Playwright's own English message ("page.waitForTimeout: Target page, context or browser
+ * has been closed") used to land in the step log and in the jury prompt, where it was read
+ * as a defect of the site: 11st.co.kr got "자바스크립트 리소스 오류를 고치세요" for a popup
+ * our own driver had closed. Say what the customer saw instead; keep the raw text when the
+ * cause is unknown rather than inventing one.
+ */
+function humanError(message: string): string {
+  if (/Target page, context or browser has been closed|Target closed/i.test(message)) return "누르자마자 창이 닫혀 다음 화면을 보지 못했습니다";
+  if (/intercepts pointer events|not visible|outside of the viewport/i.test(message)) return "다른 요소에 가려 있어 누를 수 없었습니다";
+  if (/not attached to the DOM|detached|element is not stable/i.test(message)) return "누르려는 순간 화면이 바뀌어 사라졌습니다";
+  if (/Timeout .*exceeded/i.test(message)) return "제한 시간 안에 반응하지 않았습니다";
+  if (/net::|ERR_/i.test(message)) return "페이지를 불러오지 못했습니다";
+  return message;
+}
+
+/**
  * A click that dumps the customer on Chromium's own error page is not a completed step.
  * Reporting it as "완료" made the jury describe a working link and hid the dead end.
  */
@@ -522,7 +538,13 @@ export async function performAction(session: PageSession, action: PlannedAction,
     return { status: "failed", note: "알 수 없는 행동", targetDescription: describe(item), urlAfter: before };
   } catch (error) {
     const message = (error as Error).message.split("\n")[0].slice(0, 160);
-    return { status: "failed", note: message, targetDescription: describe(item), urlAfter: page.url() };
+    let urlAfter = before;
+    try {
+      urlAfter = page.url();
+    } catch {
+      // the page went away with the error; the address before the action is the honest one
+    }
+    return { status: "failed", note: humanError(message), targetDescription: describe(item), urlAfter };
   }
 }
 
