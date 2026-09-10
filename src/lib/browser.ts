@@ -443,6 +443,14 @@ function describe(item: InventoryItem | undefined): string | null {
   return `${item.tag}${item.type ? `[${item.type}]` : ""} "${item.text}"`;
 }
 
+/**
+ * A click that dumps the customer on Chromium's own error page is not a completed step.
+ * Reporting it as "완료" made the jury describe a working link and hid the dead end.
+ */
+function landedOnErrorPage(url: string): boolean {
+  return url.startsWith("chrome-error://") || url.startsWith("chrome://network-error");
+}
+
 function syntheticText(item: InventoryItem, requested: string): string | null {
   const hint = `${item.text} ${item.type ?? ""}`.toLowerCase();
   if (item.type === "password" || /password|비밀번호|card|카드|cvc|cvv|주민|계좌/.test(hint)) return null;
@@ -480,6 +488,9 @@ export async function performAction(session: PageSession, action: PlannedAction,
       if (key === "Enter" && protectedForm) return { status: "skipped_safety", note: "비밀번호·카드 정보가 있는 폼은 제출하지 않습니다", targetDescription: null, urlAfter: before };
       await page.keyboard.press(key);
       await settle();
+      if (landedOnErrorPage(page.url())) {
+        return { status: "failed", note: `${key} 키를 눌렀지만 페이지가 열리지 않았습니다(브라우저 오류 화면)`, targetDescription: null, urlAfter: page.url() };
+      }
       return { status: "done", note: `${key} 키 입력`, targetDescription: null, urlAfter: page.url() };
     }
     if (!item) return { status: "not_found", note: `#${action.target ?? "?"} 요소를 찾지 못함`, targetDescription: null, urlAfter: before };
@@ -491,6 +502,9 @@ export async function performAction(session: PageSession, action: PlannedAction,
       await locator.scrollIntoViewIfNeeded({ timeout: 4_000 }).catch(() => undefined);
       await locator.click({ timeout: 7_000 });
       await settle();
+      if (landedOnErrorPage(page.url())) {
+        return { status: "failed", note: "링크를 눌렀지만 페이지가 열리지 않았습니다(브라우저 오류 화면)", targetDescription: describe(item), urlAfter: page.url() };
+      }
       return { status: "done", note: null, targetDescription: describe(item), urlAfter: page.url() };
     }
     if (action.type === "type") {
