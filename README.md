@@ -52,7 +52,7 @@ URL (+ 손님에게 시킬 일)
 - Playwright(Chromium) — 로컬은 `playwright`, 서버리스는 `@sparticuz/chromium` + `playwright-core`
 - Gemma 4 (`gemma-4-26b-a4b-it`, Google AI Studio API) — 시스템 프롬프트로 thinking을 억제해 비전 호출당 약 6초
 - Vercel Hobby (함수 300초, 2GB) + Vercel Blob (리포트 저장)
-- 함수는 Vercel 서울 리전(`icn1`)에서 실행됩니다 — 한국 사이트가 한국에서 온 손님으로 보게 하기 위해서입니다. 다만 데이터센터 IP 자체를 걸러 내는 곳(예: musinsa.com의 국가 선택 관문)은 여전히 남아 있고, 그런 화면은 손님이 본 그대로 리포트에 남습니다.
+- 함수는 Vercel 서울 리전(`icn1`)에서 실행됩니다 — 한국 사이트가 한국에서 온 손님으로 보게 하기 위해서입니다. 다만 위치가 아니라 데이터센터 IP 자체를 걸러 내는 곳은 여전히 남습니다. musinsa.com이 그런 경우로, 손님에게 국가 선택 관문을 보여 주거나 아예 빈 화면을 내줍니다. 그런 화면도 손님이 본 그대로 리포트에 남고, 사진이 정말 비어 있으면 라벨에 "(화면이 비어 보임)"이 붙습니다.
 
 ## 로컬 실행
 
