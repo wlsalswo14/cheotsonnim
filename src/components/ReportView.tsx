@@ -19,6 +19,15 @@ const subscribeNothing = () => () => undefined;
 const readPageUrl = () => window.location.origin + window.location.pathname;
 const readServerPageUrl = () => "";
 
+/**
+ * The server runs in UTC on Vercel and the reader's browser does not, so a plain
+ * toLocaleString made every report page throw React error #418 (hydration text mismatch).
+ * Pinning the zone makes both sides print the same Seoul time.
+ */
+function formatSeoul(iso: string): string {
+  return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" });
+}
+
 /** A percent-encoded Korean path eats three lines and reads like noise. Show it decoded. */
 function readableUrl(url: string, limit = 90): string {
   let text = url;
@@ -340,7 +349,7 @@ export function ReportView({ record, cached }: { record: RunRecord; cached: bool
           </Link>
         </div>
         <p className="meta-line" style={{ marginTop: 12 }}>
-          {new Date(record.createdAt).toLocaleString("ko-KR")} · {record.model} · 총 {(record.timings.total / 1000).toFixed(0)}초 · 리포트 {record.id}
+          {formatSeoul(record.createdAt)} · {record.model} · 총 {(record.timings.total / 1000).toFixed(0)}초 · 리포트 {record.id}
         </p>
       </section>
 
