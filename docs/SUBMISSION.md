@@ -10,7 +10,7 @@
 
 **https://cheotsonnim.vercel.app**
 
-- 샘플 리포트(심사위원이 바로 볼 화면): https://cheotsonnim.vercel.app/r/mtvgvps8-tdeyhc
+- 샘플 리포트(심사위원이 바로 볼 화면): https://cheotsonnim.vercel.app/r/mtvj91z2-whxklw
 - 방문 기록 전체: https://cheotsonnim.vercel.app/gallery
 - 저장소(공개): https://github.com/wlsalswo14/cheotsonnim
 
@@ -51,7 +51,7 @@ AI 코딩 도구 덕분에 웹사이트를 만드는 비용은 거의 0이 됐�
 
 | 사이트 | 손님에게 시킨 일 | 결과 | 점수 | 리포트 |
 | --- | --- | --- | --- | --- |
-| www.gov.kr | 여권 재발급 방법을 찾아본다 | 부분 달성 | 70 | [mtvgvps8-tdeyhc](https://cheotsonnim.vercel.app/r/mtvgvps8-tdeyhc) ★샘플 |
+| www.gov.kr | 여권 재발급 방법을 찾아본다 | 부분 달성 | 70 | [mtvj91z2-whxklw](https://cheotsonnim.vercel.app/r/mtvj91z2-whxklw) ★샘플 |
 | www.daangn.com | (손님이 직접 정함 → 중고 물품 검색하기) | 부분 달성 | 83 | [mtvgteni-onaolv](https://cheotsonnim.vercel.app/r/mtvgteni-onaolv) |
 | readmd.kr | (손님이 직접 정함 → 서비스 사용법 확인하기) | 부분 달성 | 73 | [mtvh530f-m3qfgb](https://cheotsonnim.vercel.app/r/mtvh530f-m3qfgb) |
 | toss.im | 무엇을 하는 회사인지 알아보고 채용 페이지를 찾는다 | 부분 달성 | 66 | [mtvhddfc-pfg7wp](https://cheotsonnim.vercel.app/r/mtvhddfc-pfg7wp) |

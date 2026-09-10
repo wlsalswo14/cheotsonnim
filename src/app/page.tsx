@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * The report judges land on from "샘플 리포트 보기": the gov.kr visit, where the customer's
  * first click was swallowed by a popup, closed it and got to 여권 재발급 안내 anyway.
  */
-const SAMPLE_REPORT_ID = "mtvgvps8-tdeyhc";
+const SAMPLE_REPORT_ID = "mtvj91z2-whxklw";
 
 export default async function Home() {
   const all = await listRecent().catch(() => []);

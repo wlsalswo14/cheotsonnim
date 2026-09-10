@@ -4,7 +4,7 @@
 
 원티드 AI Championship 2026 출품작. 서비스 링크: **https://cheotsonnim.vercel.app**
 
-바로 보기: [샘플 리포트(gov.kr, 70점)](https://cheotsonnim.vercel.app/r/mtvgvps8-tdeyhc) · [방문 기록 전체](https://cheotsonnim.vercel.app/gallery)
+바로 보기: [샘플 리포트(gov.kr, 70점)](https://cheotsonnim.vercel.app/r/mtvj91z2-whxklw) · [방문 기록 전체](https://cheotsonnim.vercel.app/gallery)
 
 ## 어떤 문제를 푸나
 
