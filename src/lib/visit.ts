@@ -49,7 +49,9 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
     const shot: Shot = {
       id: `S${shotCounter}`,
       viewport: session.viewport,
-      label,
+      // Say so on the photo itself: the jury reads these labels and would otherwise describe
+      // a screen that has nothing on it.
+      label: image.blank ? `${label} (화면이 비어 보임)` : label,
       jpegBase64: image.base64,
       width: image.width,
       height: image.height,
@@ -166,8 +168,14 @@ export async function runVisit(input: VisitInput): Promise<RunRecord> {
         await snap(mobile, "모바일: 첫 화면");
         mobileFacts = await collectFacts(mobile, url.toString(), mobileNav);
         if (!mobileFacts.botBlocked) {
-          await performAction(mobile, { type: "scroll", why: "아래 내용 확인" }, []);
-          await snap(mobile, "모바일: 한 화면 아래");
+          const scroll = await performAction(mobile, { type: "scroll", why: "아래 내용 확인" }, []);
+          const label = {
+            moved: "모바일: 한 화면 아래",
+            // State what was seen, not why: the photo shows the popup when there is one.
+            blocked: "모바일: 아래로 내려가지 않음",
+            nothing: "모바일: 화면이 한 장에 다 들어옴",
+          }[scroll.scrollResult ?? "moved"];
+          await snap(mobile, label);
         }
       } catch (error) {
         console.warn("mobile pass failed:", (error as Error).message);

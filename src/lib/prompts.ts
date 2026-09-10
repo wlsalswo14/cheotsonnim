@@ -25,7 +25,10 @@ export function planUserText(input: { goal: string | null; title: string; url: s
     for (const step of input.replan.steps) {
       lines.push(`- ${step.index}. ${step.action.type} ${step.targetDescription ?? ""} → ${step.status}${step.note ? ` (${step.note})` : ""}`);
     }
-    lines.push("이전 시도에서 막힌 부분을 피해서, 현재 화면 기준으로 남은 행동을 최대 3개만 다시 계획하세요. 이미 목표를 이뤘다면 actions를 빈 배열로 두세요.");
+    lines.push(
+      "이전 시도에서 막힌 부분을 피해서, 현재 화면 기준으로 남은 행동을 최대 3개만 다시 계획하세요. 이미 목표를 이뤘다면 actions를 빈 배열로 두세요.",
+      "기록에 '가려서 누르지 못했습니다'나 '화면이 내려가지 않았습니다'가 있으면 팝업·배너가 화면을 덮고 있는 것입니다. 같은 것을 다시 누르지 말고, 먼저 '닫기'·'X'·'오늘 그만 보기'·'취소'처럼 팝업을 없애는 요소를 클릭한 다음 원래 하려던 행동을 이어서 계획하세요.",
+    );
   }
   lines.push(
     "",

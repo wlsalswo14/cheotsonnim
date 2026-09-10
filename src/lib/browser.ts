@@ -190,36 +190,77 @@ export interface Screenshot {
   width: number;
   height: number;
   url: string;
+  /** The frame carries no detail — a single flat colour, whatever that colour is. */
+  blank: boolean;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * A JPEG of a single flat colour costs almost nothing beyond its own headers, and the cost
+ * is the same whether that colour is black, white or a dimmed backdrop. Measured at the
+ * quality 55 this file captures with:
+ *
+ *   1280x800 solid (black/white/gray/dim) 6757B · one line of text 7949B · real page 24-77KB
+ *    390x844 solid                        2745B · one line of text 3937B · real page 23KB
+ *
+ * which fits `845 + 0.0058 * pixels` almost exactly. Flagging at 1.12x of that keeps a page
+ * holding a single sentence out of it while still catching every uniform frame; a page that
+ * shows nothing but a loading spinner does trip it, which is the honest answer anyway.
+ */
+function looksBlank(bytes: number, width: number, height: number): boolean {
+  return bytes < (900 + 0.0058 * width * height) * 1.12;
+}
+
+/** Chromium can hand back the frame from before a scroll; wait until a new one is painted. */
+async function waitForPaint(page: Page): Promise<void> {
+  await page
+    .evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    .catch(() => undefined);
+}
+
+/**
  * Chromium refuses to capture while the renderer is swapping documents
  * ("Protocol error (Page.captureScreenshot): Unable to capture screenshot"), which used to
  * abort the whole visit right after a click that started a navigation. Settle first, retry a
- * few times, and return null rather than losing the run over one missing photo.
+ * few times, and return null rather than losing the run over one missing photo. A frame that
+ * comes back blank buys one extra wait-and-retake before we accept it as what the customer
+ * really saw.
  */
 export async function screenshotJpeg(session: PageSession, quality = 55): Promise<Screenshot | null> {
+  let blankShot: Screenshot | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     // A popup may have replaced session.page between attempts, so re-read it every time.
     const page = session.page;
-    if (page.isClosed()) return null;
+    if (page.isClosed()) return blankShot;
     try {
       await page.waitForLoadState("domcontentloaded", { timeout: 6_000 }).catch(() => undefined);
+      await waitForPaint(page);
       const buffer = await page.screenshot({ type: "jpeg", quality, fullPage: false, animations: "disabled", caret: "hide", timeout: 15_000 });
       const size = page.viewportSize() ?? VIEWPORTS[session.viewport];
-      return { base64: buffer.toString("base64"), width: size.width, height: size.height, url: page.url() };
+      const shot: Screenshot = {
+        base64: buffer.toString("base64"),
+        width: size.width,
+        height: size.height,
+        url: page.url(),
+        blank: looksBlank(buffer.length, size.width, size.height),
+      };
+      if (!shot.blank || blankShot) {
+        if (shot.blank) console.warn(`screenshot still blank after a retake (${buffer.length}B at ${size.width}x${size.height})`);
+        return shot;
+      }
+      blankShot = shot;
+      await sleep(800);
     } catch (error) {
       const message = (error as Error).message.split("\n")[0];
       if (attempt === 2) {
         console.warn("screenshot skipped after 3 attempts:", message);
-        return null;
+        return blankShot;
       }
       await sleep(600 * (attempt + 1));
     }
   }
-  return null;
+  return blankShot;
 }
 
 export interface InventoryItem {
@@ -436,6 +477,8 @@ export interface ActionOutcome {
   note: string | null;
   targetDescription: string | null;
   urlAfter: string;
+  /** scroll only: did the screen move, was it held down, or is there simply nothing below? */
+  scrollResult?: "moved" | "blocked" | "nothing";
 }
 
 function describe(item: InventoryItem | undefined): string | null {
@@ -450,13 +493,18 @@ function describe(item: InventoryItem | undefined): string | null {
  * our own driver had closed. Say what the customer saw instead; keep the raw text when the
  * cause is unknown rather than inventing one.
  */
-function humanError(message: string): string {
-  if (/Target page, context or browser has been closed|Target closed/i.test(message)) return "누르자마자 창이 닫혀 다음 화면을 보지 못했습니다";
-  if (/intercepts pointer events|not visible|outside of the viewport/i.test(message)) return "다른 요소에 가려 있어 누를 수 없었습니다";
-  if (/not attached to the DOM|detached|element is not stable/i.test(message)) return "누르려는 순간 화면이 바뀌어 사라졌습니다";
-  if (/Timeout .*exceeded/i.test(message)) return "제한 시간 안에 반응하지 않았습니다";
-  if (/net::|ERR_/i.test(message)) return "페이지를 불러오지 못했습니다";
-  return message;
+function humanError(full: string): string | null {
+  // Playwright puts "…intercepts pointer events" in the call log, several lines below the
+  // headline "Timeout 7000ms exceeded" — reading only the first line turned two blocked
+  // clicks on musinsa.com into a meaningless "제한 시간 안에 반응하지 않았습니다". Match the
+  // whole message, and keep the specific causes ahead of the generic timeout.
+  if (/intercepts pointer events/i.test(full)) return "팝업이나 다른 요소가 가려서 누르지 못했습니다";
+  if (/Target page, context or browser has been closed|Target closed/i.test(full)) return "누르자마자 창이 닫혀 다음 화면을 보지 못했습니다";
+  if (/element is not visible|outside of the viewport/i.test(full)) return "화면에 보이지 않는 자리에 있어 누를 수 없었습니다";
+  if (/not attached to the DOM|detached|element is not stable/i.test(full)) return "누르려는 순간 화면이 바뀌어 사라졌습니다";
+  if (/net::|ERR_[A-Z_]+/.test(full)) return "페이지를 불러오지 못했습니다";
+  if (/Timeout .*exceeded/i.test(full)) return "제한 시간 안에 반응하지 않았습니다";
+  return null;
 }
 
 /**
@@ -488,9 +536,32 @@ export async function performAction(session: PageSession, action: PlannedAction,
   try {
     if (action.type === "scroll") {
       const height = (page.viewportSize() ?? VIEWPORTS[session.viewport]).height;
+      // scrollHeight tells us whether there was anywhere to go: a one-screen page that does
+      // not move is not the same story as a modal holding the page down, and calling both
+      // "팝업에 막혀" mislabels every short landing page.
+      const metrics = () =>
+        page
+          .evaluate(() => {
+            const el = document.scrollingElement ?? document.documentElement;
+            return { y: window.scrollY || el.scrollTop || 0, room: Math.max(0, el.scrollHeight - el.clientHeight) };
+          })
+          .catch(() => null);
+      const before = await metrics();
       await page.mouse.wheel(0, Math.round(height * 0.85));
       await page.waitForTimeout(700);
-      return { status: "done", note: "한 화면 아래로 스크롤", targetDescription: null, urlAfter: page.url() };
+      const after = await metrics();
+      let scrollResult: ActionOutcome["scrollResult"] = "moved";
+      if (before && after) {
+        if (Math.abs(after.y - before.y) >= 8) scrollResult = "moved";
+        else if (before.room <= 8) scrollResult = "nothing";
+        else scrollResult = "blocked";
+      }
+      const note = {
+        moved: "한 화면 아래로 스크롤",
+        blocked: "화면이 내려가지 않았습니다(팝업이 화면을 붙잡고 있는 것 같습니다)",
+        nothing: "더 내려갈 내용이 없습니다(한 화면에 다 들어옵니다)",
+      }[scrollResult];
+      return { status: "done", note, targetDescription: null, urlAfter: page.url(), scrollResult };
     }
     if (action.type === "back") {
       await page.goBack({ waitUntil: "domcontentloaded", timeout: 10_000 }).catch(() => undefined);
@@ -537,14 +608,14 @@ export async function performAction(session: PageSession, action: PlannedAction,
     }
     return { status: "failed", note: "알 수 없는 행동", targetDescription: describe(item), urlAfter: before };
   } catch (error) {
-    const message = (error as Error).message.split("\n")[0].slice(0, 160);
+    const full = (error as Error).message;
     let urlAfter = before;
     try {
       urlAfter = page.url();
     } catch {
       // the page went away with the error; the address before the action is the honest one
     }
-    return { status: "failed", note: humanError(message), targetDescription: describe(item), urlAfter };
+    return { status: "failed", note: humanError(full) ?? full.split("\n")[0].slice(0, 160), targetDescription: describe(item), urlAfter };
   }
 }
 
